@@ -1,0 +1,87 @@
+- name: OSPF Setup
+  hosts: all
+  become: yes
+  vars_files:
+    - defaults/main.yml
+  tasks:
+    # Установка базовых утилит
+    - name: Install base tools
+      apt:
+        name:
+          - vim
+          - traceroute
+          - tcpdump
+          - net-tools
+        state: present
+        update_cache: true
+
+    # Отключение UFW
+    - name: Disable UFW service
+      service:
+        name: ufw
+        state: stopped
+        enabled: false
+
+    # Добавление GPG-ключа FRR
+    - name: Add GPG key for FRR
+      apt_key:
+        url: "https://deb.frrouting.org/frr/keys.asc"
+        state: present
+
+    # Добавление репозитория FRR
+    - name: Add FRR repository
+      apt_repository:
+        repo: 'deb https://deb.frrouting.org/frr {{ ansible_distribution_release }} frr-stable'
+        state: present
+
+    # Установка FRR
+    - name: Install FRR packages
+      apt:
+        name:
+          - frr
+          - frr-pythontools
+        state: present
+        update_cache: true
+
+    # Включение маршрутизации
+    - name: Enable IP forwarding
+      sysctl:
+        name: net.ipv4.conf.all.forwarding
+        value: '1'
+        state: present
+
+    # Отключение проверки асимметричного роутинга
+    - name: Disable reverse path filtering
+      sysctl:
+        name: net.ipv4.conf.all.rp_filter
+        value: '0'
+        state: present
+
+    # Копирование файла daemons
+    - name: Copy FRR daemons config
+      template:
+        src: daemons
+        dest: /etc/frr/daemons
+        owner: frr
+        group: frr
+        mode: 0640
+
+    # Копирование файла frr.conf
+    - name: Configure FRR
+      template:
+        src: frr.conf.j2
+        dest: /etc/frr/frr.conf
+        owner: frr
+        group: frr
+        mode: 0640
+      tags:
+        - setup_ospf
+
+    # Перезапуск FRR
+    - name: Restart FRR service
+      service:
+        name: frr
+        state: restarted
+        enabled: true
+      tags:
+        - setup_ospf
